@@ -1,0 +1,2 @@
+# Customer-Transactions-Analysis-for-Kroger
+Introduction: As one of the world’s largest retailers operating in 2,769 grocery retail stores, Kroger is committed to meet the demands of an ever-evolving customer base. As a part of it’s next level growth strategy, Kroger plans to analyze it’s transactional data from April 2016 to October 2017 on the basis of what its customers looks forward to buy and factors influencing their spend capacity.

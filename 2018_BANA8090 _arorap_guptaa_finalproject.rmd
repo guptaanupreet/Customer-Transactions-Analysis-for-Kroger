@@ -1,0 +1,582 @@
+---
+title: "Complete Journey Customer Transactions"
+author: "[Anupreet Gupta](https://www.linkedin.com/in/guptaanupreet/) , [Palash Arora](https://www.linkedin.com/in/palash-arora/)"
+output: html_document
+---
+
+``` {r echo=FALSE,warning=FALSE,message=FALSE }
+library(knitr)
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+library(lubridate)
+library(magrittr)
+library(sqldf)
+```
+
+## Who are my customers? {.tabset .tabset-fade}
+
+### Business Understanding
+
+#### Introduction:
+As one of the world's largest retailers operating in 2,769 grocery retail stores, Kroger is committed to meet the demands of an ever-evolving customer base. As a part of it's next level growth strategy, Kroger plans to analyze it's transactional data from **April 2016** to **October 2017** on the basis of what its customers looks forward to buy and factors influencing their spend capacity.
+
+<img style="float: center;" src= "images/background.png" width="800" height="600">
+
+#### Problem Statement:
+*	What constitutes majority of Kroger’s customer base? How is it changing over time? 
+*	Who are the benefactors of loyalty program and which are the demographics where loyalty program is most effective?
+
+#### Solution Overview:
+*	Identify proportion of customers with various demographic traits using household data
+*	Observe increases in loyalty program participation for various customer demographics
+*	Observe any shifts in these proportions between years 2016 and 2017
+*	Study shopping behavior of these high shift customers
+
+#### Business Application
+*	Knowing the composition of customer base would help Kroger understand its untapped potential
+*	Understanding customers who benefit from the loyalty card program
+
+
+### Required Packages / Functions Used 
+
+#### Required Packages
+
+Prior installing and loading the following package would result in smooth execution of codes to reproduce the project.
+
+``` {r echo=FALSE,warning=FALSE,results=FALSE}
+
+Package<-  c("tidyverse","data.table","ggplot2","lubridate","DT","knitr","rmarkdown",
+             "magrittr","sqldf")
+Purpose <- c("Creating Tidy and data and ease of installation of other      package","Importing Huge Data sets; Function fread","Creating Visuals","Rectify Data format across tables","Creating functional tables in HTML","Useful in generating dynamic reports","Converting R Markdown files into HTML/required format","For Pipe operator","To ease for writing SQL queries in R")
+packages_required_table <- data.frame(Package,Purpose)
+```
+
+
+``` {r echo=FALSE,warning=FALSE}
+kable(packages_required_table,caption="List of Required Packages")
+```
+
+#### Defined Functions
+
+Defined several functions based on the use cases, where a chunk of codes were repeated several times. Defining function helped to overcome repeatedly writing the same set of codes and avoiding mistakes at the same time.
+
+*  **1. Importing Data sets** 
+```{r results="hide"}
+read_fun <- function(file){
+  fread(file, header = TRUE, 
+  strip.white =  TRUE, stringsAsFactors = FALSE, 
+  na.strings = c("null", "NA"))
+}
+
+```
+
+*  **2. Removing Outliers** 
+
+```{r results="hide"}
+
+remove_outliers <- function(x, na.rm = TRUE, ...) {
+  qnt <- quantile(x, probs=c(.25, .75), na.rm = na.rm, ...)
+  H <- 1.5 * IQR(x, na.rm = na.rm)
+  y <- x
+  y[x < (qnt[1] - H)] <- NA
+  y[x > (qnt[2] + H)] <- NA
+  y
+}
+
+```
+
+### Data Preparation {.tabset .tabset-fade}
+
+#### Importing Data Set
+
+Using R's data.table::fread() function to import the comma separated files.
+
+```{r results="hide"}
+
+data_table <- c("5000_households.csv","5000_products.csv","5000_transactions.csv")
+output_table <- c("households","products","transactions")
+
+for(d in seq_along(data_table))
+{
+  data <- fread(paste0("data/",data_table[d]))
+  assign(output_table[d],data)
+}
+
+```
+
+
+#### Cleaning 
+
+*  **Step 1.** White space removal from data set while importing dataset. 
+
+*  **Step 2.** Null value treatment. Identifying blank,NA,"null" as Null values.
+
+```{r results="hide"}
+colSums(is.na(transactions))
+colSums(is.na(households))
+colSums(is.na(products))
+
+households_clean <- na.omit(households)
+```
+
+*  **Step 3.** Renaming Columns names as per the data dictionary provided to avoid any confusion.
+
+```{r results="hide"}
+colnames(households) <-c("hshd_num","loyalty_flag","age_range","martial_status",
+                         "income_range","homeowner_desc","hshd_composition",
+                          "hh_size","children")
+
+colnames(products) <- c("product_num","department","commodity","brand_type",
+                        "natural_organic_flag")
+
+colnames(transactions) <-c("hshd_num","basket_num","date","product_num","spend",
+                            "units","store_region","week_num","year")
+```
+
+*  **Step 4.** Outlier Treatment. Recreating columns for Spends and Units in Transaction tables.
+
+```{r results="hide"}
+transactions$spend_clean <- remove_outliers(transactions$spend)
+
+transactions$unit_clean <- remove_outliers(transactions$unit)
+
+households_clean <- na.omit(households)
+```
+
+
+#### Data Validation 
+
+*  **Step 1.** Checking for summary() of measure variables in Transactional table 
+
+``` {r results="hide"}
+summary(transactions)
+```
+
+*  **Step 2.** Formating Date Column in Transactions table
+
+``` {r results="hide"}
+transactions$date <- dmy(as.character(transactions$date))
+
+```
+
+*  **Step 3.** Removing negative transactional units and spends
+
+``` {r results="hide"}
+transactions <- subset(transactions, (spend>=0 & spend>=0))
+```
+
+*  **Step 4.** Outlier treatment after observing boxplots for measure variables
+
+``` {r results="hide"}
+boxplot(transactions$spend)
+
+boxplot(transactions$units)
+```
+
+#### Overview of Data 
+
+A look at the sample of 10 observations from each table, gives the user a chance to have a glimpse at the dataset.
+
+*  **Households** 
+
+``` {r echo=FALSE,warning=FALSE}
+kable(households[1:10,],caption="Sample from the Households Table")
+```
+
+*  **Products** 
+
+``` {r echo=FALSE,warning=FALSE}
+kable(products[1:10,],caption="Sample from the Products Table")
+```
+
+*  **Transactions** 
+
+``` {r echo=FALSE,warning=FALSE}
+kable(transactions[1:10,],caption="Sample from the Transactions Table")
+```
+
+
+### Exploratory Data Analysis {.tabset .tabset-fade}
+
+#### Data Dictionary
+
+``` {r echo=FALSE,warning=FALSE,results=FALSE}
+Variable_hh <-  names(households)
+Description_hh <- c("Uniquely identifies each household","Estimated age range",
+                 "If the household owns a loyalty card",
+                 "Maritial Status (A - Married, B - Single, U - Unknown)",
+                 "Total Household income","Type of Residency(Homeowner,renter,etc)","Composition of household","Size of household up to 5+","Number of children present up tp 3+")
+hh_desc_table <- data.frame(Variable=Variable_hh,Description=Description_hh)
+
+
+Variable_p <-  names(products)
+Description_p <- c("Uniquely identifies each product","Groups products at Food, Non-Food, Pharma","Groups products together at lower level than Department",
+                 "Identifies the product as Private or National",
+                 "Identifies the product as Natural/Organic or Inorganic")
+p_desc_table <- data.frame(Variable=Variable_p,Description=Description_p)
+
+
+Variable_t <-  names(transactions)
+Description_t <- c("Uniquely identifies each household","Uniquely identifies a purchase occasion",
+  "Date of occurence of transaction","Uniquely identifies each product","Total Sales",
+  "Number of products purchased during the trip","Identifies region for the store","Week of the transaction",
+  "Year of the transaction", "Total Sales after Outlier Treatment", "Number of products purchased during the trip after Outlier Treatment")
+
+t_desc_table <- data.frame(Variable=Variable_t,Description=Description_t)
+
+```
+
+``` {r echo=FALSE,warning=FALSE}
+kable(hh_desc_table,caption="Variable Description of **Households** Table")
+```
+
+
+``` {r echo=FALSE,warning=FALSE}
+kable(p_desc_table,caption="Variable Description of **Products** Table")
+```
+
+``` {r echo=FALSE,warning=FALSE}
+kable(p_desc_table,caption="Variable Description of **Transactions** Table")
+```
+
+#### Analysis
+
+##### __**Merging Transactions, Products and Households into one single table**__ 
+
+``` {r results="hide"}
+data_joined <- sqldf("Select t.*,p.*,h.* 
+                     from transactions t
+                     Left Join products p on p.product_num=t.product_num
+                     Left Join households_clean h on h.hshd_num=t.hshd_num
+                     ")
+data_joined$month <- month(data_joined$date)
+```
+
+
+``` {r echo=FALSE,warning=FALSE}
+kable(data_joined[1:10,],caption="Sample from the Merged Table")
+```
+
+##### __**Objective**__
+
+The objective of this analysis is to use Kroger data to find patterns and behaviors indicating health of the business and potential opportunities.
+
+
+##### __**Sales around the year:**__
+
+In order to understand the overall picture, we begin by looking at the average sales by month.
+
+``` {r results="hide"}
+monthly_sales <-  transactions %>%
+                    group_by(Month = month(date), Year = year(date)) %>%
+                    summarize(spend=sum(spend)) %>%
+                    group_by(Month) %>%
+                    summarize(spend = mean(spend)) %>%
+                    arrange(Month) %>% 
+                    data.frame %>% 
+                    mutate(Month = as.factor(Month))
+  
+```
+
+``` {r echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(monthly_sales, aes(x = Month, y = spend)) + 
+  geom_bar(stat="identity") + 
+  scale_y_continuous(name = "Monthly Sales GMV", labels = scales::dollar) +
+  ggtitle("Total Spends By Month")
+```
+
+__**Observation:**__ 
+
+*	As can be seen, the sales remain about same throughout the year except in December presumably due to holiday season. 
+
+*	Total sales increased by ~1% between year 2016 and 2017
+
+Is this spike in sales caused by a larger volume of customers or a larger basket size? Let’s find out next.
+
+##### __**Average basket spends by month:**__
+
+```{r results="hide"}
+avg_basket_sales <-  transactions %>%
+                      group_by(hshd_num, basket_num, Month = month(date)) %>%
+                      summarize(basket_spend=sum(spend))
+
+avg_basket_sales2 <- avg_basket_sales %>%
+                      group_by(Month) %>%
+                      summarize(monthly_avg_basket_spend = mean(basket_spend)) %>%
+                      arrange(Month) %>% 
+                      data.frame %>% 
+                      mutate(Month = as.factor(Month))
+
+```
+
+``` {r echo=FALSE,warning=FALSE,message=FALSE}
+ggplot(avg_basket_sales2, aes(x = Month, y = monthly_avg_basket_spend)) +
+  geom_bar(stat="identity") +
+  scale_y_continuous(name = "Average Spend", labels = scales::dollar) +
+  ggtitle("Average Basket Spends By Month")
+```
+
+__**Observation:**__ 
+
+* Average basket spend by month indicates that high sales is primarily driven by existing customers buying more volume of products in December.
+
+Now, we want to understand what type of customers purchase most from Krogers. It would improve our understanding of typical Kroger customer and highlight potential customer groups Kroger can tap into 
+
+##### __**Who are my customers?**__
+
+__**Best Performing Demographics Profile**__
+
+__**Total sales by household:**__
+
+``` {r results="hide"}
+hshd_sales <- transactions %>% 
+                group_by(hshd_num) %>% 
+                summarize(sales = sum(spend))
+
+merged_transactions <- merge(hshd_sales, households, by = "hshd_num")
+
+```
+
+``` {r warning=FALSE,message=FALSE}
+nrow(hshd_sales)
+nrow(merged_transactions)
+(1 - nrow(merged_transactions)/nrow(hshd_sales))
+```
+
+**Challenges:**
+
+* 99.9% households information is not available in households dataset
+
+
+__**Average Spends and Households:**__
+
+``` {r results="hide"}
+spend_profile <-  na.omit(merged_transactions) %>% 
+  group_by(loyalty_flag, martial_status, income_range, hh_size, age_range) %>% 
+  summarize(avg_spend = mean(sales), hh_count = n()) %>% 
+  filter(hh_count >= 10) %>% #removing cases where sample size is < 10 households
+  arrange(desc(avg_spend))
+```
+
+``` {r echo=FALSE,warning=FALSE}
+kable(spend_profile[1:20,],caption="Sample from the spend_profile Table")
+```
+
+**Observation:** 
+
+* Looking at recurring demographic traits of top 5 groups, we observe that Married, 50-74 Years Old, 4 people size customers are best spending.
+
+Next, we also want to look at the fastest-growing customer demographics of customers to identify potential future customers.
+
+##### __**Fastest growing demographics profile**__
+
+**YoY change in Average Spends by Customer Demographics**
+
+``` {r results="hide"}
+hshd_sales_16 <- transactions %>% 
+                  filter(year == 2016) %>% 
+                  group_by(hshd_num) %>% 
+                  summarize(sales_16 = sum(spend),hh_16 = n())
+
+hshd_sales_17 <- transactions %>% 
+                  filter(year == 2017) %>% 
+                  group_by(hshd_num) %>% 
+                  summarize(sales_17 = sum(spend),hh_17 = n())
+
+merged_transactions_16_17 <- merge(hshd_sales_16, hshd_sales_17, by = "hshd_num")
+
+```
+
+``` {r warning=FALSE,message=FALSE}
+yearly_demographics <- merge(merged_transactions_16_17, households, by = "hshd_num")
+```
+**Observation:** 
+
+* We looked at the shopping trends of customers who shopped repeatedly in both years 2016 and 2017 but could not do so due to limitation in demographics data.
+
+**Challenges:** 
+
+* On merging the data for customers who have repeatedly shopped with the customer demographics table; it has returned zero information indicating that households table have no information regarding these customers.
+
+* This could be a major setback for the company, as not having information or demographics related data about regular customers can led loss of sales or not understanding their needs.
+
+
+Retaining existing customers is equally important as acquiring new ones for any large scale business like Kroger. Which is why we want to understand customer retention rates.
+
+``` {r warning=FALSE,message=FALSE}
+length(unique(merged_transactions_16_17$hshd_num))
+
+length(unique(hshd_sales_16$hshd_num))
+
+```
+__**Takeaway:**__ 
+
+* There were 3520 customers who shopped again in 2017 after 2016.
+Out of total 516718 HHIDs in 2016. There is a poor retention that Kroger can potentially work on.
+
+
+##### __**Retention of Customers**__
+
+*	Year Over Year: Out of 2016 shoppers how many shopped again in 2017
+
+*	Month over Month:
+
+__**Retain rate:**__ How many customer shop in consecutive months?
+
+__**Reactivation rate:**__ How many customers shop again after having shopped from Kroger in past?
+
+
+``` {r results="hide"}
+hshd_month <- transactions %>%
+  filter(year == 2016) %>% 
+  mutate( Month = month(date)) %>% 
+  select(hshd_num, Month) %>% 
+  unique %>% 
+  mutate(next_month = Month + 1)
+```
+
+``` {r echo=FALSE,warning=FALSE}
+kable(hshd_month[1:10,],caption="Sample from the Customer M-o-M Table")
+```
+``` {r results="hide"}
+hshd_month %>% 
+  group_by(hshd_num) %>% 
+  summarise(cnt = n()) %>% arrange(desc(cnt))
+```
+
+__**Observation:**__ 
+
+* Due to limitations with transaction data, we do not find significant number of households visiting Kroger more than once.
+
+
+
+__**Challenges:**__ 
+
+* Since none of the Household Ids shop more than one day, New, repeating and reactivated customers cannot be assessed
+
+Identifying M-o-M, New, Retained and Reactivated customers for Kroger could help them understand their customer in-depth. It could also help in assessing on what sort of customers, they need to focus on during their marketing campaign. Retention rate of customers also is very important metric, which due to randomness or missing information cannot be evaluated here.
+
+After analyzing sales and demographics traits, we want to sales by product types.
+
+
+##### __**Sales by Region**__
+
+
+``` {r results="hide"}
+region_wise_sale <- data_joined %>% 
+  group_by(year,month,store_region) %>% 
+  summarise(gmv = sum(spend_clean,na.rm=T),
+  sales = sum(unit_clean,na.rm=T)) %>% 
+  arrange(year,month,store_region)
+```
+
+``` {r echo=FALSE,warning=FALSE,message=FALSE}
+region_wise_sale %>% 
+  filter(year==2016) %>% 
+  ggplot(aes(x=month,y=sales,col=store_region)) +
+  geom_line() + geom_smooth(method="lm")+
+  scale_y_continuous(name = "Monthly Sales Units", labels = scales::comma) +
+  scale_x_discrete(name = "Months", limits=month.abb[c(1:12)]) +
+  ggtitle("Region Wise Sales for 2016")
+
+region_wise_sale %>% 
+  filter(year==2017) %>% 
+  ggplot(aes(x=month,y=sales,col=store_region)) +
+  geom_line() + geom_smooth(method="lm")+
+  scale_y_continuous(name = "Monthly Sales Units", labels = scales::comma) +
+  scale_x_discrete(name = "Months", limits=month.abb[c(1:12)]) +
+  ggtitle("Region Wise Sales for 2017")
+```
+
+__**Observations:**__
+
+* East region stores have been the best performing in terms of sales volume in comparison to the other stores.
+
+* While there was Month-Over-Month growth in sales volume during 2016 for West and Central regions, sales have been stagnant for West and declining for Central in 2017. 
+
+Next, we want to observe sales by product type. One important product categorization is Private Vs National brands. Selling private brands promotes brand loyalty towards Kroger while also providing higher profit margins than national brands.
+
+
+##### __**Sales by Brand Type**__
+
+Private labels are items manufactured and market under the Kroger brand, which have higher margin in comparison to National label. 
+
+``` {r results="hide"}
+brand_type_wise_sale <- data_joined %>% 
+  group_by(year,month,brand_type) %>% 
+  summarise(gmv = sum(spend_clean,na.rm=T),
+  sales = sum(unit_clean,na.rm=T)) %>% 
+  arrange(year,month,brand_type)
+```
+
+``` {r echo=FALSE,warning=FALSE,message=FALSE}
+brand_type_wise_sale %>% 
+  filter(year==2016) %>% 
+  ggplot(aes(x=month,y=sales,col=brand_type)) +
+  geom_line() + geom_smooth(method="lm")+
+  scale_y_continuous(name = "Monthly Sales Units", labels = scales::comma) +
+  scale_x_discrete(name = "Months", limits=month.abb[c(1:12)]) +
+  ggtitle("National/Private Wise Sales for 2016")
+
+brand_type_wise_sale %>% 
+  filter(year==2017) %>% 
+  ggplot(aes(x=month,y=sales,col=brand_type)) +
+  geom_line() + geom_smooth(method="lm")+
+  scale_y_continuous(name = "Monthly Sales Units", labels = scales::comma) +
+  scale_x_discrete(name = "Months", limits=month.abb[c(1:12)]) +
+  ggtitle("National/Private Wise Sales for 2017")
+```
+__**Observations:**__
+
+* The private brands for Kroger contributes ~ 32 % of their total sales, which have seen a growth of 0.5 % over 2016 to 2017.
+
+Also,
+
+* Food Department contributes the maximum towards the total sales. Usually these are fast moving items, which calls the need to predict the demand before hand to plan the inventory well in advance. There hasn't been in major change between year 2016 and 2017.
+
+* During 2016, percentage contribution from inorganic products were increasing Month-Over-Month, contributing on an average 96% of total sales, while Year 2017 saw an inclination towards Natural/Organic product with their contribution increasing from 5% to 6%. This is an early indicator that customers in future are more likely to shift towards natural products.
+
+
+### Summary
+
+The objective of this analysis is to use Kroger data to find patterns and behaviors indicating health of the business and potential opportunities. Below is a summary of key findings.
+
+__**Overall performance by year:**__
+
+*	Total sales of Kroger increased by ~1% between year 2016 and 2017.
+
+__**Best performing months:**__
+
+*	Sales are highest in December presumably due to holiday season.
+
+*	The high sales is driven primarily by existing customers buying a high volume of products.
+
+__**Best performing customer demographics:**__
+
+*	Married, 50-74 Years Old, 4 people size customers are spend the most at Kroger
+
+__**Private brands sales performance:**__
+
+Selling private brands promotes brand loyalty towards Kroger while also providing higher profit margins than National brands. We found:
+
+*	The private brands for Kroger contribute ~ 32 % of their total sales, which have seen a growth of 0.5 % over 2016 to 2017.
+
+__**Best performing regions:**__
+
+*	East region stores have been the best performing in terms of sales volume. 
+
+*	While there was Month-Over-Month growth in sales volume during 2016 for West and Central regions, sales has been stagnant for West and declining for Central in 2017.
+
+
+### Next Steps / Recommendations
+
+* Looking at the data, there seems to be huge gap in how the data is collated for every household. The company to boosts sales and enchance customer experience and loyalty should be putting into use the customer data already available with them but the process of collecting customer information needs to be streamlined.
+
+* Understanding on a monthly level, Retained vs Reactivated vs New customers coming to the stores. Further, understanding of these three groups could help marketing campaigns in an effective manner.
+
+* Given, the iformation on customer, KNN Clustering could be performed to identify groups of customers with similar shopping patterns and hence sales and inventories could be planned well ahead of an event.
+
+* A predictive model could be built to assit in understanding the monthly sales for any region. This information could be help in evaluating the prospectives of opening a new store in the region given the demographics of that region is known in advance.
+
+
